@@ -3,6 +3,7 @@ Copyright 2016 Aviral Dasgupta
 Copyright 2016 OpenMarket Ltd
 Copyright 2018, 2019 New Vector Ltd
 Copyright 2017, 2019 Michael Telatynski <7t3chguy@gmail.com>
+Copyright 2020 The Matrix.org Foundation C.I.C.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,6 +43,18 @@ const Store = require('electron-store');
 
 const fs = require('fs');
 const afs = fs.promises;
+
+const crypto = require('crypto');
+let keytar;
+try {
+    keytar = require('keytar');
+} catch (e) {
+    if (e.code === "MODULE_NOT_FOUND") {
+        console.log("Keytar isn't installed; secure key storage is disabled.");
+    } else {
+        console.warn("Keytar unexpected error:", e);
+    }
+}
 
 let seshatSupported = false;
 let Seshat;
@@ -194,6 +207,14 @@ let eventIndex = null;
 let mainWindow = null;
 global.appQuitting = false;
 
+
+const deleteContents = async (p) => {
+    for (const entry of await afs.readdir(p)) {
+        const curPath = path.join(p, entry);
+        await afs.unlink(curPath);
+    }
+};
+
 // handle uncaught errors otherwise it displays
 // stack traces in popup dialogs, which is terrible (which
 // it will do any time the auto update poke fails, and there's
@@ -239,17 +260,6 @@ ipcMain.on('app_onAction', function(ev, payload) {
             }
             break;
     }
-});
-
-autoUpdater.on('update-downloaded', (ev, releaseNotes, releaseName, releaseDate, updateURL) => {
-    if (!mainWindow) return;
-    // forward to renderer
-    mainWindow.webContents.send('update-downloaded', {
-        releaseNotes,
-        releaseName,
-        releaseDate,
-        updateURL,
-    });
 });
 
 ipcMain.on('ipcCall', async function(ev, payload) {
@@ -365,6 +375,41 @@ ipcMain.on('ipcCall', async function(ev, payload) {
             recordSSOSession(args[0]);
             break;
 
+        case 'getPickleKey':
+            try {
+                ret = await keytar.getPassword("riot.im", `${args[0]}|${args[1]}`);
+            } catch (e) {
+                // if an error is thrown (e.g. keytar can't connect to the keychain),
+                // then return null, which means the default pickle key will be used
+                ret = null;
+            }
+            break;
+
+        case 'createPickleKey':
+            try {
+                const randomArray = await new Promise((resolve, reject) => {
+                    crypto.randomBytes(32, (err, buf) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(buf);
+                        }
+                    });
+                });
+                const pickleKey = randomArray.toString("base64").replace(/=+$/g, '');
+                await keytar.setPassword("riot.im", `${args[0]}|${args[1]}`, pickleKey);
+                ret = pickleKey;
+            } catch (e) {
+                ret = null;
+            }
+            break;
+
+        case 'destroyPickleKey':
+            try {
+                await keytar.deletePassword("riot.im", `${args[0]}|${args[1]}`);
+            } catch (e) {}
+            break;
+
         default:
             mainWindow.webContents.send('ipcReply', {
                 id: payload.id,
@@ -416,7 +461,22 @@ ipcMain.on('seshat', async function(ev, payload) {
                             const recoveryIndex = new SeshatRecovery(eventStorePath, {
                                 passphrase: seshatPassphrase,
                             });
-                            await recoveryIndex.reindex();
+
+                            const userVersion = await recoveryIndex.getUserVersion();
+
+                            // If our user version is 0 we'll delete the db
+                            // anyways so reindexing it is a waste of time.
+                            if (userVersion === 0) {
+                                await recoveryIndex.shutdown();
+
+                                try {
+                                    await deleteContents(eventStorePath);
+                                } catch (e) {
+                                }
+                            } else {
+                                await recoveryIndex.reindex();
+                            }
+
                             eventIndex = new Seshat(eventStorePath, {
                                 passphrase: seshatPassphrase,
                             });
@@ -448,15 +508,8 @@ ipcMain.on('seshat', async function(ev, payload) {
 
         case 'deleteEventIndex':
             {
-                const deleteFolderRecursive = async (p) => {
-                    for (const entry of await afs.readdir(p)) {
-                        const curPath = path.join(p, entry);
-                        await afs.unlink(curPath);
-                    }
-                };
-
                 try {
-                    await deleteFolderRecursive(eventStorePath);
+                    await deleteContents(eventStorePath);
                 } catch (e) {
                 }
             }
@@ -466,6 +519,11 @@ ipcMain.on('seshat', async function(ev, payload) {
         case 'isEventIndexEmpty':
             if (eventIndex === null) ret = true;
             else ret = await eventIndex.isEmpty();
+            break;
+
+        case 'isRoomIndexed':
+            if (eventIndex === null) ret = false;
+            else ret = await eventIndex.isRoomIndexed(args[0]);
             break;
 
         case 'addEventToIndex':
@@ -576,6 +634,30 @@ ipcMain.on('seshat', async function(ev, payload) {
             }
             break;
 
+        case 'setUserVersion':
+            if (eventIndex === null) break;
+            else {
+                try {
+                    await eventIndex.setUserVersion(args[0]);
+                } catch (e) {
+                    sendError(payload.id, e);
+                    return;
+                }
+            }
+            break;
+
+        case 'getUserVersion':
+            if (eventIndex === null) ret = 0;
+            else {
+                try {
+                    ret = await eventIndex.getUserVersion();
+                } catch (e) {
+                    sendError(payload.id, e);
+                    return;
+                }
+            }
+            break;
+
         default:
             mainWindow.webContents.send('seshatReply', {
                 id: payload.id,
@@ -614,6 +696,17 @@ protocol.registerSchemesAsPrivileged([{
         supportFetchAPI: true,
     },
 }]);
+
+// Turn the sandbox on for *all* windows we might generate. Doing this means we don't
+// have to specify a `sandbox: true` to each BrowserWindow.
+//
+// This also fixes an issue with window.open where if we only specified the sandbox
+// on the main window we'd run into cryptic "ipc_renderer be broke" errors. Turns out
+// it's trying to jump the sandbox and make some calls into electron, which it can't
+// do when half of it is sandboxed. By turning on the sandbox for everything, the new
+// window (no matter how temporary it may be) is also sandboxed, allowing for a clean
+// transition into the user's browser.
+app.enableSandbox();
 
 app.on('ready', async () => {
     try {
@@ -725,7 +818,7 @@ app.on('ready', async () => {
         webPreferences: {
             preload: preloadScript,
             nodeIntegration: false,
-            sandbox: true,
+            //sandbox: true, // We enable sandboxing from app.enableSandbox() above
             enableRemoteModule: false,
             // We don't use this: it's useful for the preload script to
             // share a context with the main page so we can give select
