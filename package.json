@@ -1,6 +1,6 @@
 {
-  "name": "riot-desktop",
-  "productName": "Riot",
+  "name": "riot-web-remark",
+  "productName": "Remark",
   "main": "src/electron-main.js",
   "version": "1.6.8",
   "description": "A feature-rich client for Matrix.org",
@@ -62,7 +62,7 @@
     "keytar": "^5.6.0"
   },
   "build": {
-    "appId": "im.riot.app",
+    "appId": "im.remark.app",
     "electronVersion": "9.0.5",
     "files": [
       "package.json",
