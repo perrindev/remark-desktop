@@ -1,3 +1,63 @@
+Changes in [1.7.3](https://github.com/vector-im/element-desktop/releases/tag/v1.7.3) (2020-08-05)
+=================================================================================================
+[Full Changelog](https://github.com/vector-im/element-desktop/compare/v1.7.3-rc.1...v1.7.3)
+
+ * No changes since 1.7.3-rc.1
+
+Changes in [1.7.3-rc.1](https://github.com/vector-im/riot-desktop/releases/tag/v1.7.3-rc.1) (2020-07-31)
+========================================================================================================
+[Full Changelog](https://github.com/vector-im/riot-desktop/compare/v1.7.2...v1.7.3-rc.1)
+
+ * Clean up linting
+   [\#126](https://github.com/vector-im/riot-desktop/pull/126)
+ * Update renaming workaround for 'Element' name
+   [\#125](https://github.com/vector-im/riot-desktop/pull/125)
+
+Changes in [1.7.2](https://github.com/vector-im/riot-desktop/releases/tag/v1.7.2) (2020-07-27)
+==============================================================================================
+[Full Changelog](https://github.com/vector-im/riot-desktop/compare/v1.7.1...v1.7.2)
+
+ * Catch exceptions from main method in fetch script
+   [\#124](https://github.com/vector-im/riot-desktop/pull/124)
+ * Use new eslint package
+   [\#122](https://github.com/vector-im/riot-desktop/pull/122)
+ * Remove ' (Riot)' from app name
+   [\#123](https://github.com/vector-im/riot-desktop/pull/123)
+
+Changes in [1.7.1](https://github.com/vector-im/riot-desktop/releases/tag/v1.7.1) (2020-07-16)
+==============================================================================================
+[Full Changelog](https://github.com/vector-im/riot-desktop/compare/v1.7.0...v1.7.1)
+
+ * Bump lodash from 4.17.15 to 4.17.19
+   [\#121](https://github.com/vector-im/riot-desktop/pull/121)
+ * Don't forget nightly when computing userData path
+   [\#120](https://github.com/vector-im/riot-desktop/pull/120)
+ * Fix hosting link
+   [\#119](https://github.com/vector-im/riot-desktop/pull/119)
+ * New macOS icon
+   [\#117](https://github.com/vector-im/riot-desktop/pull/117)
+ * Update README.md
+   [\#118](https://github.com/vector-im/riot-desktop/pull/118)
+ * More icon updates
+   [\#115](https://github.com/vector-im/riot-desktop/pull/115)
+ * Don't forget to yarn install
+   [\#114](https://github.com/vector-im/riot-desktop/pull/114)
+
+Changes in [1.7.0](https://github.com/vector-im/riot-desktop/releases/tag/v1.7.0) (2020-07-15)
+==============================================================================================
+[Full Changelog](https://github.com/vector-im/riot-desktop/compare/v1.6.8...v1.7.0)
+
+ * Fix lint error
+   [\#113](https://github.com/vector-im/riot-desktop/pull/113)
+ * Delabs font-scaling
+   [\#112](https://github.com/vector-im/riot-desktop/pull/112)
+ * Remove room list labs flag from config
+   [\#109](https://github.com/vector-im/riot-desktop/pull/109)
+ * Remove the irc layout setting from labs
+   [\#111](https://github.com/vector-im/riot-desktop/pull/111)
+ * Update npm to ^6.14.6
+   [\#108](https://github.com/vector-im/riot-desktop/pull/108)
+
 Changes in [1.6.8](https://github.com/vector-im/riot-desktop/releases/tag/v1.6.8) (2020-07-03)
 ==============================================================================================
 [Full Changelog](https://github.com/vector-im/riot-desktop/compare/v1.6.8-rc.1...v1.6.8)

@@ -99,15 +99,43 @@ if (argv["help"]) {
     app.exit();
 }
 
+// Electron creates the user data directory (with just an empty 'Dictionaries' directory...)
+// as soon as the app path is set, so pick a random path in it that must exist if it's a
+// real user data directory.
+function isRealUserDataDir(d) {
+    return fs.existsSync(path.join(d, 'IndexedDB'));
+}
+
 // check if we are passed a profile in the SSO callback url
+let userDataPath;
+
 const userDataPathInProtocol = getProfileFromDeeplink(argv["_"]);
 if (userDataPathInProtocol) {
-    app.setPath('userData', userDataPathInProtocol);
+    userDataPath = userDataPathInProtocol;
 } else if (argv['profile-dir']) {
-    app.setPath('userData', argv['profile-dir']);
-} else if (argv['profile']) {
-    app.setPath('userData', `${app.getPath('userData')}-${argv['profile']}`);
+    userDataPath = argv['profile-dir'];
+} else {
+    let newUserDataPath = app.getPath('userData');
+    if (argv['profile']) {
+        newUserDataPath += '-' + argv['profile'];
+    }
+    const newUserDataPathExists = isRealUserDataDir(newUserDataPath);
+    let oldUserDataPath = path.join(app.getPath('appData'), app.getName().replace('Element', 'Riot'));
+    if (argv['profile']) {
+        oldUserDataPath += '-' + argv['profile'];
+    }
+
+    const oldUserDataPathExists = isRealUserDataDir(oldUserDataPath);
+    console.log(newUserDataPath + " exists: " + (newUserDataPathExists ? 'yes' : 'no'));
+    console.log(oldUserDataPath + " exists: " + (oldUserDataPathExists ? 'yes' : 'no'));
+    if (!newUserDataPathExists && oldUserDataPathExists) {
+        console.log("Using legacy user data path: " + oldUserDataPath);
+        userDataPath = oldUserDataPath;
+    } else {
+        userDataPath = newUserDataPath;
+    }
 }
+app.setPath('userData', userDataPath);
 
 async function tryPaths(name, root, rawPaths) {
     // Make everything relative to root
@@ -182,21 +210,40 @@ async function setupGlobals() {
 
     // The tray icon
     // It's important to call `path.join` so we don't end up with the packaged asar in the final path.
-    const iconFile = `riot.${process.platform === 'win32' ? 'ico' : 'png'}`;
+    const iconFile = `element.${process.platform === 'win32' ? 'ico' : 'png'}`;
     iconPath = path.join(resPath, "img", iconFile);
     trayConfig = {
         icon_path: iconPath,
-        brand: vectorConfig.brand || 'Riot',
+        brand: vectorConfig.brand || 'Element',
     };
 
     // launcher
     launcher = new AutoLaunch({
-        name: vectorConfig.brand || 'Riot',
+        name: vectorConfig.brand || 'Element',
         isHidden: true,
         mac: {
             useLaunchAgent: true,
         },
     });
+}
+
+async function moveAutoLauncher() {
+    // Look for an auto-launcher under 'Riot' and if we find one, port it's
+    // enabled/disbaledp-ness over to the new 'Element' launcher
+    if (!vectorConfig.brand || vectorConfig.brand === 'Element') {
+        const oldLauncher = new AutoLaunch({
+            name: 'Riot',
+            isHidden: true,
+            mac: {
+                useLaunchAgent: true,
+            },
+        });
+        const wasEnabled = await oldLauncher.isEnabled();
+        if (wasEnabled) {
+            await oldLauncher.disable();
+            await launcher.enable();
+        }
+    }
 }
 
 const eventStorePath = path.join(app.getPath('userData'), 'EventStore');
@@ -377,7 +424,12 @@ ipcMain.on('ipcCall', async function(ev, payload) {
 
         case 'getPickleKey':
             try {
-                ret = await keytar.getPassword("riot.im", `${args[0]}|${args[1]}`);
+                ret = await keytar.getPassword("element.io", `${args[0]}|${args[1]}`);
+                // migrate from riot.im (remove once we think there will no longer be
+                // logins from the time of riot.im)
+                if (ret === null) {
+                    ret = await keytar.getPassword("riot.im", `${args[0]}|${args[1]}`);
+                }
             } catch (e) {
                 // if an error is thrown (e.g. keytar can't connect to the keychain),
                 // then return null, which means the default pickle key will be used
@@ -397,7 +449,7 @@ ipcMain.on('ipcCall', async function(ev, payload) {
                     });
                 });
                 const pickleKey = randomArray.toString("base64").replace(/=+$/g, '');
-                await keytar.setPassword("riot.im", `${args[0]}|${args[1]}`, pickleKey);
+                await keytar.setPassword("element.io", `${args[0]}|${args[1]}`, pickleKey);
                 ret = pickleKey;
             } catch (e) {
                 ret = null;
@@ -406,6 +458,9 @@ ipcMain.on('ipcCall', async function(ev, payload) {
 
         case 'destroyPickleKey':
             try {
+                await keytar.deletePassword("element.io", `${args[0]}|${args[1]}`);
+                // migrate from riot.im (remove once we think there will no longer be
+                // logins from the time of riot.im)
                 await keytar.deletePassword("riot.im", `${args[0]}|${args[1]}`);
             } catch (e) {}
             break;
@@ -711,6 +766,7 @@ app.enableSandbox();
 app.on('ready', async () => {
     try {
         await setupGlobals();
+        await moveAutoLauncher();
     } catch (e) {
         console.log("App setup failed: exiting", e);
         process.exit(1);
@@ -909,4 +965,4 @@ app.on('second-instance', (ev, commandLine, workingDirectory) => {
 // installer uses for the shortcut icon.
 // This makes notifications work on windows 8.1 (and is
 // a noop on other platforms).
-app.setAppUserModelId('com.squirrel.riot-web.Riot');
+app.setAppUserModelId('com.squirrel.element-desktop.Element');

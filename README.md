@@ -1,23 +1,31 @@
-Riot Desktop
-============
+Element Desktop
+===============
 
-This is Riot desktop app as of release 1.6.
+Element Desktop is a Matrix client for desktop platforms with Element Web at its core.
 
-Fetching Riot
-=============
-Since this package is just the Electron wrapper for Riot, it doesn't contain any of the Riot code,
-so the first step is to get a working copy of Riot. There are a few ways of doing this:
+First Steps
+===========
+Before you do anything else, fetch the dependencies:
 
 ```
-# Fetch the prebuilt release Riot package from the riot.im GitHub releases page. The version
-# fetched will be the same as the local riot-desktop package.
-# We're explicitly asking for no config, so the package Riot will have no config.json.
+yarn install
+```
+
+Fetching Element
+================
+Since this package is just the Electron wrapper for Element Web, it doesn't contain any of the Element Web code,
+so the first step is to get a working copy of Element Web. There are a few ways of doing this:
+
+```
+# Fetch the prebuilt release Element package from the element-web GitHub releases page. The version
+# fetched will be the same as the local element-desktop package.
+# We're explicitly asking for no config, so the packaged Element will have no config.json.
 yarn run fetch --noverify --cfgdir ''
 ```
 
 ...or if you'd like to use GPG to verify the downloaded package:
 ```
-# Fetch the Riot public key from the riot.im web server over a secure connection and import
+# Fetch the Element public key from the element.io web server over a secure connection and import
 # it into your local GPG keychain (you'll need GPG installed). You only need to to do this
 # once.
 yarn run fetch --importkey
@@ -25,18 +33,18 @@ yarn run fetch --importkey
 yarn run fetch --cfgdir ''
 ```
 
-...or either of the above, but fetching a specific version of Riot:
+...or either of the above, but fetching a specific version of Element:
 ```
-# Fetch the prebuilt release Riot package from the riot.im GitHub releases page. The version
-# fetched will be the same as the local riot-desktop package.
+# Fetch the prebuilt release Element package from the element-web GitHub releases page. The version
+# fetched will be the same as the local element-desktop package.
 yarn run fetch --noverify --cfgdir '' v1.5.6
 ```
 
 If you only want to run the app locally and don't need to build packages, you can
 provide the `webapp` directory directly:
 ```
-# Assuming you've checked out and built a copy of riot-web in ../riot-web
-ln -s ../riot-web/webapp ./
+# Assuming you've checked out and built a copy of element-web in ../element-web
+ln -s ../element-web/webapp ./
 ```
 
 [TODO: add support for fetching develop builds, arbitrary URLs and arbitrary paths]
@@ -44,15 +52,29 @@ ln -s ../riot-web/webapp ./
 
 Building
 ========
-Now you have a copy of Riot, you're ready to build packages. If you'd just like to
-run Riot locally, skip to the next section.
+Now you have a copy of Element, you're ready to build packages. If you'd just like to
+run Element locally, skip to the next section.
+
+If you'd like to build the native modules (for searching in encrypted rooms and
+secure storage), do this first. This will take 10 minutes or so, and will
+require a number of native tools to be installed, depending on your OS (eg.
+rust, tcl, make/nmake). If you don't need these features, you can skip this
+step.
+```
+yarn run build:native
+```
+
+On Windows, this will automatically determine the architecture to build for based
+on the environment (ie. set up by vcvarsall.bat).
+
+Now you can build the package:
 
 ```
 yarn run build
 ```
 This will do a couple of things:
  * Run the `setversion` script to set the local package version to match whatever
-   version of Riot you installed above.
+   version of Element you installed above.
  * Run electron-builder to build a package. The package built will match the operating system
    you're running the build process on.
 
@@ -66,16 +88,6 @@ yarn run build64
 ```
 
 This build step will not build any native modules.
-
-If you'd like to build the native modules (for searching in encrypted rooms):
-This will take 10 minutes or so, and will require a number of native tools
-to be installed, depending on your OS (eg. rust, tcl, make/nmake).
-```
-yarn run build:native
-```
-
-On Windows, this will automatically determine the architecture to build for based
-on the environment (ie. set up by vcvarsall.bat).
 
 You can also build using docker, which will always produce the linux package:
 ```
@@ -102,7 +114,7 @@ yarn start
 
 Config
 ======
-If you'd like the packaged Riot to have a configuration file, you can create a
+If you'd like the packaged Element to have a configuration file, you can create a
 config directory and place `config.json` in there, then specify this directory
 with the `--cfgdir` option to `yarn run fetch`, eg:
 ```
@@ -110,15 +122,15 @@ mkdir myconfig
 cp /path/to/my/config.json myconfig/
 yarn run fetch --cfgdir myconfig
 ```
-The config dir for the official Riot.im app is in `riot.im`. If you use this,
-your app will auto-update itself using builds from Riot.im.
+The config dir for the official Element app is in `element.io`. If you use this,
+your app will auto-update itself using builds from element.io.
 
 Profiles
 ========
 
 To run multiple instances of the desktop app for different accounts, you can
 launch the executable with the `--profile` argument followed by a unique
-identifier, e.g `riot-desktop --profile Work` for it to run a separate profile and
+identifier, e.g `element-desktop --profile Work` for it to run a separate profile and
 not interfere with the default one.
 
 Alternatively, a custom location for the profile data can be specified using the
@@ -131,5 +143,14 @@ User-specified config.json
 + `$XDG_CONFIG_HOME\$NAME\config.json` or `~/.config/$NAME/config.json` on Linux
 + `~/Library/Application Support/$NAME/config.json` on macOS
 
-In the paths above, `$NAME` is typically `Riot`, unless you use `--profile
-$PROFILE` in which case it becomes `Riot-$PROFILE`.
+In the paths above, `$NAME` is typically `Element`, unless you use `--profile
+$PROFILE` in which case it becomes `Element-$PROFILE`, or it is using one of
+the above created by a pre-1.7 install, in which case it will be `Riot` or
+`Riot-$PROFILE`.
+
+Report bugs & give feedback
+==========================
+
+If you run into any bugs or have feedback you'd like to share, please let us know on GitHub.
+
+To help avoid duplicate issues, please [view existing issues](https://github.com/vector-im/element-web/issues?q=is%3Aopen+is%3Aissue+sort%3Areactions-%2B1-desc) first (and add a +1) or [create a new issue](https://github.com/vector-im/element-web/issues/new) if you can't find it.  Please note that this issue tracker is associated with the [element-web](https://github.com/vector-im/element-web) repo, but is also applied to the code in this repo as well.
