@@ -1,9 +1,8 @@
 /*
 Copyright 2016 Aviral Dasgupta
 Copyright 2016 OpenMarket Ltd
-Copyright 2018, 2019 New Vector Ltd
 Copyright 2017, 2019 Michael Telatynski <7t3chguy@gmail.com>
-Copyright 2020 The Matrix.org Foundation C.I.C.
+Copyright 2018 - 2021 New Vector Ltd
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -182,7 +181,7 @@ async function setupGlobals() {
         vectorConfig = require(asarPath + 'config.json');
     } catch (e) {
         // it would be nice to check the error code here and bail if the config
-        // is unparseable, but we get MODULE_NOT_FOUND in the case of a missing
+        // is unparsable, but we get MODULE_NOT_FOUND in the case of a missing
         // file or invalid json, so node is just very unhelpful.
         // Continue with the defaults (ie. an empty config)
         vectorConfig = {};
@@ -922,11 +921,7 @@ app.on('ready', async () => {
             nodeIntegration: false,
             //sandbox: true, // We enable sandboxing from app.enableSandbox() above
             enableRemoteModule: false,
-            // We don't use this: it's useful for the preload script to
-            // share a context with the main page so we can give select
-            // objects to the main page. The sandbox option isolates the
-            // main page from the background script.
-            contextIsolation: false,
+            contextIsolation: true,
             webgl: false,
             spellcheck: true,
         },
