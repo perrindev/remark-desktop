@@ -27,7 +27,9 @@ const argv = require('minimist')(process.argv, {
     alias: {help: "h"},
 });
 
-const {app, ipcMain, powerSaveBlocker, BrowserWindow, Menu, autoUpdater, protocol} = require('electron');
+const {
+    app, ipcMain, powerSaveBlocker, BrowserWindow, Menu, autoUpdater, protocol, dialog,
+} = require('electron');
 const AutoLaunch = require('auto-launch');
 const path = require('path');
 
@@ -253,6 +255,30 @@ let eventIndex = null;
 let mainWindow = null;
 global.appQuitting = false;
 
+const exitShortcuts = [
+    (input, platform) => platform !== 'darwin' && input.alt && input.code === 'F4',
+    (input, platform) => platform !== 'darwin' && input.control && input.code === 'KeyQ',
+    (input, platform) => platform === 'darwin' && input.meta && input.code === 'KeyQ',
+];
+
+const warnBeforeExit = (event, input) => {
+    const shouldWarnBeforeExit = store.get('warnBeforeExit', true);
+    const exitShortcutPressed = exitShortcuts.some(shortcutFn => shortcutFn(input, process.platform));
+
+    if (shouldWarnBeforeExit && exitShortcutPressed) {
+        const shouldCancelCloseRequest = dialog.showMessageBoxSync(mainWindow, {
+            type: "question",
+            buttons: ["Cancel", "Close Element"],
+            message: "Are you sure you want to quit?",
+            defaultId: 1,
+            cancelId: 0,
+        }) === 0;
+
+        if (shouldCancelCloseRequest) {
+            event.preventDefault();
+        }
+    }
+};
 
 const deleteContents = async (p) => {
     for (const entry of await afs.readdir(p)) {
@@ -340,6 +366,12 @@ ipcMain.on('ipcCall', async function(ev, payload) {
                 launcher.disable();
             }
             break;
+        case 'shouldWarnBeforeExit':
+            ret = store.get('warnBeforeExit', true);
+            break;
+        case 'setWarnBeforeExit':
+            store.set('warnBeforeExit', args[0]);
+            break;
         case 'getMinimizeToTrayEnabled':
             ret = tray.hasTray();
             break;
@@ -385,50 +417,32 @@ ipcMain.on('ipcCall', async function(ev, payload) {
                 mainWindow.webContents.goForward();
             }
             break;
-        case 'setLanguage': {
-            // work around `setSpellCheckerLanguages` being case-sensitive by converting to expected case
-            const caseMap = {};
-            const availableLanguages = mainWindow.webContents.session.availableSpellCheckerLanguages;
-            availableLanguages.forEach(lang => {
-                caseMap[lang.toLowerCase()] = lang;
-            });
+        case 'setSpellCheckLanguages':
+            if (args[0] && args[0].length > 0) {
+                mainWindow.webContents.session.setSpellCheckerEnabled(true);
+                store.set("spellCheckerEnabled", true);
 
-            if (!caseMap["en"]) {
-                // default special-case for `en` as in Riot is actually implies `en-GB`. `en-US` is distinct.
-                // this way if `en` is requested and not available and `en-GB` is available it'll be used.
-                caseMap["en"] = caseMap["en-gb"];
-            }
-
-            const languages = new Set();
-            args[0].forEach(lang => {
-                const lcLang = lang.toLowerCase();
-                if (caseMap[lcLang]) {
-                    languages.add(caseMap[lcLang]);
-                    return;
+                try {
+                    mainWindow.webContents.session.setSpellCheckerLanguages(args[0]);
+                } catch (er) {
+                    console.log("There were problems setting the spellcheck languages", er);
                 }
-
-                // as a fallback if the language is unknown check if the language group is known, e.g en for en-AU
-                const langGroup = lcLang.split("-")[0];
-                if (caseMap[langGroup]) {
-                    languages.add(caseMap[langGroup]);
-                    return;
-                }
-
-                // as a further fallback, pick all other matching variants from the same language group
-                // this means that if we cannot find `ar-dz` or `ar` for example, we will pick `ar-*` to
-                // offer a spellcheck which is least likely to wrongly red underline something.
-                availableLanguages.forEach(availableLang => {
-                    if (availableLang.startsWith(langGroup)) {
-                        languages.add(availableLang);
-                    }
-                });
-            });
-
-            if (languages.size > 0) {
-                mainWindow.webContents.session.setSpellCheckerLanguages([...languages]);
+            } else {
+                mainWindow.webContents.session.setSpellCheckerEnabled(false);
+                store.set("spellCheckerEnabled", false);
             }
             break;
-        }
+        case 'getSpellCheckLanguages':
+            if (store.get("spellCheckerEnabled", true)) {
+                ret = mainWindow.webContents.session.getSpellCheckerLanguages();
+            } else {
+                ret = [];
+            }
+            break;
+        case 'getAvailableSpellCheckLanguages':
+            ret = mainWindow.webContents.session.availableSpellCheckerLanguages;
+            break;
+
         case 'startSSOFlow':
             recordSSOSession(args[0]);
             break;
@@ -923,11 +937,14 @@ app.on('ready', async () => {
             enableRemoteModule: false,
             contextIsolation: true,
             webgl: false,
-            spellcheck: true,
         },
     });
     mainWindow.loadURL('vector://vector/webapp/');
     Menu.setApplicationMenu(vectorMenu);
+
+    // Handle spellchecker
+    // For some reason spellCheckerEnabled isn't persisted so we have to use the store here
+    mainWindow.webContents.session.setSpellCheckerEnabled(store.get("spellCheckerEnabled", true));
 
     // Create trayIcon icon
     if (store.get('minimizeToTray', true)) tray.create(trayConfig);
@@ -943,10 +960,12 @@ app.on('ready', async () => {
         }
     });
 
+    mainWindow.webContents.on('before-input-event', warnBeforeExit);
+
     mainWindow.on('closed', () => {
         mainWindow = global.mainWindow = null;
     });
-    mainWindow.on('close', (e) => {
+    mainWindow.on('close', async (e) => {
         // If we are not quitting and have a tray icon then minimize to tray
         if (!global.appQuitting && (tray.hasTray() || process.platform === 'darwin')) {
             // On Mac, closing the window just hides it
